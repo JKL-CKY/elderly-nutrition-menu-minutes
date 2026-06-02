@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>营养计算器</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🧮 营养需求计算器</h1>
+            <nav>
+                <a href="/">首页</a>
+                <a href="/elderly">老人档案</a>
+                <a href="/nutrition" class="active">营养计算器</a>
+                <a href="/meeting">会议管理</a>
+                <a href="/menu">菜单管理</a>
+            </nav>
+        </header>
+
+        <div class="grid">
+            <div class="card">
+                <h2>输入老人信息</h2>
+                <div class="form-group">
+                    <label>选择老人</label>
+                    <select id="elderlySelect" onchange="fillElderlyInfo()">
+                        <option value="">-- 请选择 --</option>
+                    </select>
+                </div>
+                <div class="grid">
+                    <div class="form-group">
+                        <label>体重(kg) *</label>
+                        <input type="number" id="weight" step="0.1" required>
+                    </div>
+                    <div class="form-group">
+                        <label>身高(cm) *</label>
+                        <input type="number" id="height" step="0.1" required>
+                    </div>
+                    <div class="form-group">
+                        <label>年龄 *</label>
+                        <input type="number" id="age" required>
+                    </div>
+                    <div class="form-group">
+                        <label>性别 *</label>
+                        <select id="gender" required>
+                            <option value="">请选择</option>
+                            <option value="男">男</option>
+                            <option value="女">女</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>活动水平</label>
+                    <select id="activityLevel">
+                        <option value="卧床">卧床</option>
+                        <option value="轻度活动">轻度活动</option>
+                        <option value="中度活动" selected>中度活动</option>
+                        <option value="高度活动">高度活动</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>健康状况（可多选）</label>
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;">
+                        <label><input type="checkbox" class="health-condition" value="糖尿病"> 糖尿病</label>
+                        <label><input type="checkbox" class="health-condition" value="高血压"> 高血压</label>
+                        <label><input type="checkbox" class="health-condition" value="高血脂"> 高血脂</label>
+                        <label><input type="checkbox" class="health-condition" value="肾病"> 肾病</label>
+                    </div>
+                </div>
+                <button class="btn btn-primary" style="width: 100%;" onclick="calculateNutrition()">计算营养需求</button>
+            </div>
+
+            <div class="card">
+                <h2>计算结果</h2>
+                <div id="resultContainer">
+                    <p style="color: #888; text-align: center; padding: 40px 0;">请输入信息后点击计算按钮</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>膳食营养参考标准</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>营养素</th>
+                        <th>老年人推荐摄入量</th>
+                        <th>说明</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>热量</td>
+                        <td>25-30 kcal/kg/天</td>
+                        <td>根据活动量调整</td>
+                    </tr>
+                    <tr>
+                        <td>蛋白质</td>
+                        <td>1.0-1.2 g/kg/天</td>
+                        <td>优质蛋白质为主</td>
+                    </tr>
+                    <tr>
+                        <td>脂肪</td>
+                        <td>占总热量20-30%</td>
+                        <td>减少饱和脂肪</td>
+                    </tr>
+                    <tr>
+                        <td>碳水化合物</td>
+                        <td>占总热量50-60%</td>
+                        <td>选择复合碳水</td>
+                    </tr>
+                    <tr>
+                        <td>膳食纤维</td>
+                        <td>≥25 g/天</td>
+                        <td>蔬菜水果全谷物</td>
+                    </tr>
+                    <tr>
+                        <td>钠</td>
+                        <td>≤2000 mg/天</td>
+                        <td>高血压患者≤1500mg</td>
+                    </tr>
+                    <tr>
+                        <td>钙</td>
+                        <td>1000-1200 mg/天</td>
+                        <td>预防骨质疏松</td>
+                    </tr>
+                    <tr>
+                        <td>维生素D</td>
+                        <td>800-1000 IU/天</td>
+                        <td>促进钙吸收</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+    <script>
+        let elderlyList = [];
+
+        async function loadElderlyOptions() {
+            try {
+                elderlyList = await apiCall('/api/elderly');
+                const select = document.getElementById('elderlySelect');
+                elderlyList.forEach(e => {
+                    const option = document.createElement('option');
+                    option.value = e.id;
+                    option.textContent = `${e.name} (${e.age || '?'}岁)`;
+                    select.appendChild(option);
+                });
+            } catch (e) {
+                console.error('加载老人列表失败', e);
+            }
+        }
+
+        function fillElderlyInfo() {
+            const id = document.getElementById('elderlySelect').value;
+            if (!id) return;
+            
+            const elderly = elderlyList.find(e => e.id == id);
+            if (elderly) {
+                document.getElementById('weight').value = elderly.weight || '';
+                document.getElementById('height').value = elderly.height || '';
+                document.getElementById('age').value = elderly.age || '';
+                document.getElementById('gender').value = elderly.gender || '';
+                document.getElementById('activityLevel').value = elderly.activity_level || '中度活动';
+            }
+        }
+
+        async function calculateNutrition() {
+            const weight = parseFloat(document.getElementById('weight').value);
+            const height = parseFloat(document.getElementById('height').value);
+            const age = parseInt(document.getElementById('age').value);
+            const gender = document.getElementById('gender').value;
+            const activityLevel = document.getElementById('activityLevel').value;
+            
+            const conditions = [];
+            document.querySelectorAll('.health-condition:checked').forEach(cb => {
+                conditions.push(cb.value);
+            });
+            
+            if (!weight || !height || !age || !gender) {
+                showAlert('请填写所有必填项', 'error');
+                return;
+            }
+            
+            showLoading('resultContainer');
+            
+            try {
+                const result = await apiCall('/api/nutrition/calculate', 'POST', {
+                    weight_kg: weight,
+                    height_cm: height,
+                    age,
+                    gender,
+                    activity_level: activityLevel,
+                    health_conditions: conditions
+                });
+                
+                renderResult(result);
+            } catch (e) {
+                document.getElementById('resultContainer').innerHTML = 
+                    '<p style="color: red;">计算失败，请重试</p>';
+            }
+            
+            hideLoading();
+        }
+
+        function renderResult(result) {
+            const bmiClass = result.bmi < 18.5 ? 'badge-warning' : 
+                           result.bmi >= 24 ? 'badge-danger' : 'badge-success';
+            
+            const html = `
+                <div class="grid" style="margin-bottom: 20px;">
+                    <div class="stat-card">
+                        <div class="value">${result.bmi}</div>
+                        <div class="label">BMI指数 <span class="badge ${bmiClass}">${result.bmi_category}</span></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="value">${result.bmr}</div>
+                        <div class="label">基础代谢(kcal)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="value">${result.tdee}</div>
+                        <div class="label">总消耗(kcal)</div>
+                    </div>
+                </div>
+                
+                <h3 style="margin: 20px 0 10px; color: #667eea;">每日营养需求</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>营养素</th>
+                            <th>推荐摄入量</th>
+                            <th>进度</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>热量</td>
+                            <td>${result.requirements.calories} kcal</td>
+                            <td><div class="nutrition-bar"><div class="nutrition-bar-fill" style="width: 100%;"></div></div></td>
+                        </tr>
+                        <tr>
+                            <td>蛋白质</td>
+                            <td>${result.requirements.protein} ${result.requirements.protein_unit}</td>
+                            <td><div class="nutrition-bar"><div class="nutrition-bar-fill" style="width: ${Math.min(100, result.requirements.protein / 100 * 100)}%;"></div></div></td>
+                        </tr>
+                        <tr>
+                            <td>脂肪</td>
+                            <td>${result.requirements.fat} ${result.requirements.fat_unit}</td>
+                            <td><div class="nutrition-bar"><div class="nutrition-bar-fill" style="width: ${Math.min(100, result.requirements.fat / 80 * 100)}%;"></div></div></td>
+                        </tr>
+                        <tr>
+                            <td>碳水化合物</td>
+                            <td>${result.requirements.carbohydrates} ${result.requirements.carbohydrates_unit}</td>
+                            <td><div class="nutrition-bar"><div class="nutrition-bar-fill" style="width: ${Math.min(100, result.requirements.carbohydrates / 300 * 100)}%;"></div></div></td>
+                        </tr>
+                        <tr>
+                            <td>膳食纤维</td>
+                            <td>≥${result.requirements.fiber_min} ${result.requirements.fiber_unit}</td>
+                            <td><div class="nutrition-bar"><div class="nutrition-bar-fill" style="width: ${Math.min(100, result.requirements.fiber_min / 30 * 100)}%;"></div></div></td>
+                        </tr>
+                        <tr>
+                            <td>钠</td>
+                            <td>≤${result.requirements.sodium_limit} ${result.requirements.sodium_unit}</td>
+                            <td><div class="nutrition-bar"><div class="nutrition-bar-fill" style="width: ${Math.min(100, result.requirements.sodium_limit / 2000 * 100)}%;"></div></div></td>
+                        </tr>
+                        <tr>
+                            <td>钙</td>
+                            <td>≥${result.requirements.calcium_min} ${result.requirements.calcium_unit}</td>
+                            <td><div class="nutrition-bar"><div class="nutrition-bar-fill" style="width: ${Math.min(100, result.requirements.calcium_min / 1200 * 100)}%;"></div></div></td>
+                        </tr>
+                        <tr>
+                            <td>饮水</td>
+                            <td>≥${result.requirements.water_min} ${result.requirements.water_unit}</td>
+                            <td><div class="nutrition-bar"><div class="nutrition-bar-fill" style="width: ${Math.min(100, result.requirements.water_min / 2000 * 100)}%;"></div></div></td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <div style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 5px;">
+                    <h4 style="margin-bottom: 10px; color: #667eea;">💡 营养建议</h4>
+                    <p style="line-height: 1.8; white-space: pre-line;">${result.advice}</p>
+                </div>
+            `;
+            
+            document.getElementById('resultContainer').innerHTML = html;
+        }
+
+        loadElderlyOptions();
+    </script>
+</body>
+</html>

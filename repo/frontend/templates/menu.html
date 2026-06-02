@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>菜单管理</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🍽️ 每周营养菜单管理</h1>
+            <nav>
+                <a href="/">首页</a>
+                <a href="/elderly">老人档案</a>
+                <a href="/nutrition">营养计算器</a>
+                <a href="/meeting">会议管理</a>
+                <a href="/menu" class="active">菜单管理</a>
+            </nav>
+        </header>
+
+        <div class="card">
+            <h2>菜单计划列表</h2>
+            <div id="menuList">
+                <div class="loading active">
+                    <div class="spinner"></div>
+                    <p>加载中...</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="detailModal" class="modal">
+            <div class="modal-content" style="max-width: 1000px;">
+                <div class="modal-header">
+                    <h3 id="detailTitle">菜单详情</h3>
+                    <span class="close-btn" onclick="closeModal('detailModal')">&times;</span>
+                </div>
+                <div id="detailContent"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+    <script>
+        async function loadMenuList() {
+            try {
+                const menus = await apiCall('/api/menu/plans');
+                renderMenuList(menus);
+            } catch (e) {
+                document.getElementById('menuList').innerHTML = 
+                    '<p style="color: red;">加载失败，请刷新页面重试</p>';
+            }
+        }
+
+        function renderMenuList(menus) {
+            if (menus.length === 0) {
+                document.getElementById('menuList').innerHTML = 
+                    '<p>暂无菜单计划，请先在会议管理中上传并处理会议录音</p>';
+                return;
+            }
+
+            let html = '<table><thead><tr><th>周期</th><th>关联会议</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead><tbody>';
+            
+            menus.forEach(m => {
+                const weekStart = formatDate(m.week_start).split(' ')[0];
+                const weekEnd = formatDate(m.week_end).split(' ')[0];
+                const statusClass = m.sent_to_families ? 'badge-success' : 'badge-warning';
+                const statusText = m.sent_to_families ? '已发送' : '未发送';
+                
+                html += `
+                    <tr>
+                        <td>${weekStart} ~ ${weekEnd}</td>
+                        <td>${m.meeting_id || '无'}</td>
+                        <td><span class="badge ${statusClass}">${statusText}</span></td>
+                        <td>${formatDate(m.created_at)}</td>
+                        <td>
+                            <button class="btn btn-primary" style="padding: 5px 10px; font-size: 12px;" onclick="viewDetail(${m.id})">查看</button>
+                            ${!m.sent_to_families ? 
+                                `<button class="btn btn-success" style="padding: 5px 10px; font-size: 12px;" onclick="sendToFamilies(${m.id})">发送给家属</button>` : ''}
+                        </td>
+                    </tr>
+                `;
+            });
+            
+            html += '</tbody></table>';
+            document.getElementById('menuList').innerHTML = html;
+        }
+
+        async function viewDetail(id) {
+            try {
+                const menu = await apiCall(`/api/menu/plans/${id}`);
+                const markdown = await apiCall(`/api/menu/plans/${id}/markdown`);
+                
+                const weekStart = formatDate(menu.week_start).split(' ')[0];
+                const weekEnd = formatDate(menu.week_end).split(' ')[0];
+                
+                document.getElementById('detailTitle').textContent = `每周菜单 (${weekStart} ~ ${weekEnd})`;
+                
+                const html = `
+                    <div style="margin-bottom: 20px;">
+                        <span class="badge ${menu.sent_to_families ? 'badge-success' : 'badge-warning'}">
+                            ${menu.sent_to_families ? '已发送给家属' : '未发送'}
+                        </span>
+                        ${!menu.sent_to_families ? 
+                            `<button class="btn btn-success" style="margin-left: 10px; padding: 5px 15px;" onclick="sendToFamilies(${menu.id})">发送给家属</button>` : ''}
+                    </div>
+                    <div class="markdown-content" id="markdownContent"></div>
+                `;
+                
+                document.getElementById('detailContent').innerHTML = html;
+                document.getElementById('markdownContent').innerHTML = marked(markdown.markdown_content || '');
+                
+                openModal('detailModal');
+            } catch (e) {
+                showAlert('加载详情失败', 'error');
+            }
+        }
+
+        async function sendToFamilies(id) {
+            if (!confirm('确定要将此菜单发送给所有家属代表吗？')) return;
+            
+            try {
+                const result = await apiCall(`/api/menu/plans/${id}/send-to-families`, 'POST');
+                showAlert(result.message);
+                closeModal('detailModal');
+                loadMenuList();
+            } catch (e) {
+                showAlert('发送失败', 'error');
+            }
+        }
+
+        function marked(text) {
+            return text
+                .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+                .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+                .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+                .replace(/\*\*(.*)\*\*/gim, '<strong>$1</strong>')
+                .replace(/\*(.*)\*/gim, '<em>$1</em>')
+                .replace(/^- (.*$)/gim, '<li>$1</li>')
+                .replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>')
+                .replace(/\|(.*)\|/g, (match) => {
+                    const cells = match.split('|').filter(c => c.trim());
+                    if (cells.every(c => /^[-:]+$/.test(c.trim()))) return '';
+                    return '<tr><td>' + cells.map(c => c.trim()).join('</td><td>') + '</td></tr>';
+                })
+                .replace(/(<tr>.*<\/tr>)/s, '<table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%;">$1</table>')
+                .replace(/\n/g, '<br>');
+        }
+
+        loadMenuList();
+    </script>
+</body>
+</html>

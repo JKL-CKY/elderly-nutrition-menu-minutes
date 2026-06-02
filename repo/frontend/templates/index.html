@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>养老院膳食营养管理系统 - 首页</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🏥 养老院膳食营养管理系统</h1>
+            <nav>
+                <a href="/" class="active">首页</a>
+                <a href="/elderly">老人档案</a>
+                <a href="/nutrition">营养计算器</a>
+                <a href="/meeting">会议管理</a>
+                <a href="/menu">菜单管理</a>
+            </nav>
+        </header>
+
+        <div class="grid">
+            <div class="stat-card">
+                <div class="value" id="elderlyCount">0</div>
+                <div class="label">在院老人</div>
+            </div>
+            <div class="stat-card">
+                <div class="value" id="meetingCount">0</div>
+                <div class="label">会议记录</div>
+            </div>
+            <div class="stat-card">
+                <div class="value" id="menuCount">0</div>
+                <div class="label">菜单计划</div>
+            </div>
+            <div class="stat-card">
+                <div class="value" id="processedCount">0</div>
+                <div class="label">已处理会议</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>系统功能介绍</h2>
+            <div class="grid">
+                <div>
+                    <h3>📋 老人健康档案</h3>
+                    <p>管理在院老人的基本信息、健康记录、饮食禁忌和家属联系方式。</p>
+                </div>
+                <div>
+                    <h3>🧮 营养计算器</h3>
+                    <p>根据老人身体状况和活动水平，计算个性化的营养需求。</p>
+                </div>
+                <div>
+                    <h3>🎙️ 会议管理</h3>
+                    <p>上传营养师与厨师长讨论音频，自动转写、提取营养需求。</p>
+                </div>
+                <div>
+                    <h3>🍽️ 菜单管理</h3>
+                    <p>AI生成每周营养菜单，包含评定表，并自动发送给家属。</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>工作流程</h2>
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 20px 0;">
+                <div style="text-align: center; flex: 1;">
+                    <div style="width: 60px; height: 60px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 50%; color: white; display: flex; align-items: center; justify-content: center; margin: 0 auto 10px; font-size: 24px;">1</div>
+                    <p>上传会议录音</p>
+                </div>
+                <div style="font-size: 30px; color: #ccc;">→</div>
+                <div style="text-align: center; flex: 1;">
+                    <div style="width: 60px; height: 60px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 50%; color: white; display: flex; align-items: center; justify-content: center; margin: 0 auto 10px; font-size: 24px;">2</div>
+                    <p>AI转写与分析</p>
+                </div>
+                <div style="font-size: 30px; color: #ccc;">→</div>
+                <div style="text-align: center; flex: 1;">
+                    <div style="width: 60px; height: 60px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 50%; color: white; display: flex; align-items: center; justify-content: center; margin: 0 auto 10px; font-size: 24px;">3</div>
+                    <p>生成每周菜单</p>
+                </div>
+                <div style="font-size: 30px; color: #ccc;">→</div>
+                <div style="text-align: center; flex: 1;">
+                    <div style="width: 60px; height: 60px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 50%; color: white; display: flex; align-items: center; justify-content: center; margin: 0 auto 10px; font-size: 24px;">4</div>
+                    <p>发送给家属</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+    <script>
+        async function loadStats() {
+            try {
+                const elderly = await apiCall('/api/elderly');
+                const meetings = await apiCall('/api/meetings');
+                const menus = await apiCall('/api/menu/plans');
+                
+                document.getElementById('elderlyCount').textContent = elderly.length || 0;
+                document.getElementById('meetingCount').textContent = meetings.length || 0;
+                document.getElementById('menuCount').textContent = menus.length || 0;
+                document.getElementById('processedCount').textContent = 
+                    meetings.filter(m => m.processed).length || 0;
+            } catch (e) {
+                console.error('加载统计数据失败', e);
+            }
+        }
+        
+        loadStats();
+    </script>
+</body>
+</html>

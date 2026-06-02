@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>会议管理</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎙️ 膳食营养会议管理</h1>
+            <nav>
+                <a href="/">首页</a>
+                <a href="/elderly">老人档案</a>
+                <a href="/nutrition">营养计算器</a>
+                <a href="/meeting" class="active">会议管理</a>
+                <a href="/menu">菜单管理</a>
+            </nav>
+        </header>
+
+        <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2 style="margin: 0;">会议列表</h2>
+                <button class="btn btn-primary" onclick="openModal('addMeetingModal')">+ 新建会议</button>
+            </div>
+            
+            <div id="meetingList">
+                <div class="loading active">
+                    <div class="spinner"></div>
+                    <p>加载中...</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="addMeetingModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>新建会议</h3>
+                    <span class="close-btn" onclick="closeModal('addMeetingModal')">&times;</span>
+                </div>
+                <form id="addMeetingForm">
+                    <div class="form-group">
+                        <label>会议标题 *</label>
+                        <input type="text" name="title" required>
+                    </div>
+                    <div class="form-group">
+                        <label>会议录音（可选）</label>
+                        <input type="file" name="audio_file" accept="audio/*">
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">创建会议</button>
+                </form>
+            </div>
+        </div>
+
+        <div id="detailModal" class="modal">
+            <div class="modal-content" style="max-width: 900px;">
+                <div class="modal-header">
+                    <h3 id="detailTitle">会议详情</h3>
+                    <span class="close-btn" onclick="closeModal('detailModal')">&times;</span>
+                </div>
+                <div class="tabs">
+                    <div class="tab active" onclick="switchTab('transcript')">转写内容</div>
+                    <div class="tab" onclick="switchTab('analysis')">营养分析</div>
+                    <div class="tab" onclick="switchTab('menu')">生成菜单</div>
+                </div>
+                <div id="detailContent"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+    <script>
+        let currentMeeting = null;
+        let currentTab = 'transcript';
+
+        async function loadMeetingList() {
+            try {
+                const meetings = await apiCall('/api/meetings');
+                renderMeetingList(meetings);
+            } catch (e) {
+                document.getElementById('meetingList').innerHTML = 
+                    '<p style="color: red;">加载失败，请刷新页面重试</p>';
+            }
+        }
+
+        function renderMeetingList(meetings) {
+            if (meetings.length === 0) {
+                document.getElementById('meetingList').innerHTML = '<p>暂无会议记录，请点击上方按钮添加</p>';
+                return;
+            }
+
+            let html = '<table><thead><tr><th>标题</th><th>日期</th><th>状态</th><th>操作</th></tr></thead><tbody>';
+            
+            meetings.forEach(m => {
+                const statusClass = m.processed ? 'badge-success' : 'badge-warning';
+                const statusText = m.processed ? '已处理' : '待处理';
+                html += `
+                    <tr>
+                        <td>${m.title}</td>
+                        <td>${formatDate(m.meeting_date)}</td>
+                        <td><span class="badge ${statusClass}">${statusText}</span></td>
+                        <td>
+                            <button class="btn btn-primary" style="padding: 5px 10px; font-size: 12px;" onclick="viewDetail(${m.id})">查看</button>
+                            ${!m.processed && m.audio_file_path ? 
+                                `<button class="btn btn-success" style="padding: 5px 10px; font-size: 12px;" onclick="processMeeting(${m.id})">处理</button>` : ''}
+                        </td>
+                    </tr>
+                `;
+            });
+            
+            html += '</tbody></table>';
+            document.getElementById('meetingList').innerHTML = html;
+        }
+
+        async function viewDetail(id) {
+            try {
+                currentMeeting = await apiCall(`/api/meetings/${id}`);
+                document.getElementById('detailTitle').textContent = currentMeeting.title;
+                switchTab('transcript');
+                openModal('detailModal');
+            } catch (e) {
+                showAlert('加载详情失败', 'error');
+            }
+        }
+
+        async function switchTab(tab) {
+            currentTab = tab;
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            if (!currentMeeting) return;
+            
+            const container = document.getElementById('detailContent');
+            container.innerHTML = '<div class="loading active"><div class="spinner"></div><p>加载中...</p></div>';
+            
+            try {
+                if (tab === 'transcript') {
+                    const data = await apiCall(`/api/meetings/${currentMeeting.id}/transcription`);
+                    renderTranscript(data);
+                } else if (tab === 'analysis') {
+                    renderAnalysis();
+                } else if (tab === 'menu') {
+                    const menu = await apiCall(`/api/meetings/${currentMeeting.id}/menu-plan`);
+                    renderMenu(menu);
+                }
+            } catch (e) {
+                container.innerHTML = '<p style="color: red;">加载失败</p>';
+            }
+        }
+
+        function renderTranscript(data) {
+            let html = '';
+            
+            if (!data.processed) {
+                html = `<div style="text-align: center; padding: 40px;">
+                    <p style="margin-bottom: 20px;">该会议尚未处理</p>
+                    <button class="btn btn-primary" onclick="processMeeting(${currentMeeting.id})">开始处理</button>
+                </div>`;
+            } else {
+                html = `<div style="margin-bottom: 20px;">
+                    <h4>转写内容</h4>
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; line-height: 1.8;">
+                        ${data.transcription || '暂无内容'}
+                    </div>
+                </div>`;
+                
+                if (data.diarization && data.diarization.segments) {
+                    html += `<h4>说话人分离</h4><table><thead><tr><th>时间</th><th>说话人</th></tr></thead><tbody>`;
+                    data.diarization.segments.forEach(seg => {
+                        html += `<tr>
+                            <td>${formatTime(seg.start)} - ${formatTime(seg.end)}</td>
+                            <td>${seg.speaker}</td>
+                        </tr>`;
+                    });
+                    html += '</tbody></table>';
+                }
+            }
+            
+            document.getElementById('detailContent').innerHTML = html;
+        }
+
+        function renderAnalysis() {
+            if (!currentMeeting.processed) {
+                document.getElementById('detailContent').innerHTML = 
+                    '<p style="text-align: center; padding: 40px; color: #888;">请先处理会议以查看营养分析结果</p>';
+                return;
+            }
+            
+            const html = `
+                <div style="padding: 20px 0;">
+                    <div class="alert alert-success">
+                        <strong>营养需求已提取</strong>
+                        <p>系统已自动从会议内容中提取以下信息：</p>
+                        <ul style="margin-top: 10px; padding-left: 20px;">
+                            <li>饮食禁忌和过敏原</li>
+                            <li>食物质地要求（普食/软食/半流食/流食）</li>
+                            <li>营养素关注点（蛋白质、钙、维生素等）</li>
+                            <li>特殊疾病饮食要求</li>
+                        </ul>
+                    </div>
+                    <p style="text-align: center; margin-top: 20px;">
+                        <a href="/menu" class="btn btn-primary">前往菜单管理查看详情</a>
+                    </p>
+                </div>
+            `;
+            document.getElementById('detailContent').innerHTML = html;
+        }
+
+        function renderMenu(menu) {
+            if (!menu) {
+                document.getElementById('detailContent').innerHTML = 
+                    '<p style="text-align: center; padding: 40px; color: #888;">暂无生成的菜单</p>';
+                return;
+            }
+            
+            const html = `
+                <div style="padding: 10px 0;">
+                    <div style="margin-bottom: 15px;">
+                        <strong>菜单周期：</strong>${formatDate(menu.week_start)} - ${formatDate(menu.week_end)}
+                        <span class="badge ${menu.sent_to_families ? 'badge-success' : 'badge-warning'}" style="margin-left: 10px;">
+                            ${menu.sent_to_families ? '已发送给家属' : '未发送'}
+                        </span>
+                    </div>
+                    <div class="markdown-content">
+                        ${marked(menu.markdown_content || '')}
+                    </div>
+                    <div style="margin-top: 20px; text-align: center;">
+                        <a href="/menu" class="btn btn-primary">前往菜单管理</a>
+                    </div>
+                </div>
+            `;
+            document.getElementById('detailContent').innerHTML = html;
+        }
+
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        async function processMeeting(id) {
+            if (!confirm('确定要处理该会议吗？处理可能需要几分钟时间。')) return;
+            
+            try {
+                await apiCall(`/api/meetings/${id}/process`, 'POST');
+                showAlert('处理已启动，请稍后刷新查看结果');
+                closeModal('detailModal');
+                loadMeetingList();
+            } catch (e) {
+                showAlert('启动处理失败', 'error');
+            }
+        }
+
+        document.getElementById('addMeetingForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            
+            try {
+                const title = formData.get('title');
+                const audio_file = formData.get('audio_file');
+                
+                let url = `/api/meetings?title=${encodeURIComponent(title)}`;
+                let data = null;
+                let isFormData = false;
+                
+                if (audio_file && audio_file.size > 0) {
+                    data = formData;
+                    isFormData = true;
+                }
+                
+                await apiCall(url, 'POST', data, isFormData);
+                showAlert('会议创建成功');
+                closeModal('addMeetingModal');
+                e.target.reset();
+                loadMeetingList();
+            } catch (err) {
+                showAlert('创建失败', 'error');
+            }
+        });
+
+        function marked(text) {
+            return text
+                .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+                .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+                .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+                .replace(/\*\*(.*)\*\*/gim, '<strong>$1</strong>')
+                .replace(/\*(.*)\*/gim, '<em>$1</em>')
+                .replace(/\n/g, '<br>');
+        }
+
+        loadMeetingList();
+    </script>
+</body>
+</html>
