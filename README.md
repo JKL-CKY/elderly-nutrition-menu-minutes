@@ -1,0 +1,2 @@
+# elderly-nutrition-menu-minutes
+养老院膳食营养会议长寿食单纪要全栈系统——前端显示老人健康档案与营养计算器，后端处理营养师与厨师讨论，Whisper转写忌口与食物质地要求，pyannote区分厨师长与营养师，spaCy提取营养素数据，OpenAI生成带评定表的每周菜单摘要
